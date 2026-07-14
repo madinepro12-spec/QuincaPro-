@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Quincaillerie — Gestion &amp; Point de Vente</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#17140F">
+<style>
+  :root{
+    --bg: #17140F;
+    --panel: #211D16;
+    --panel-2: #2A251C;
+    --line: #3A3226;
+    --gold: #C89B3C;
+    --gold-dim: #8A6B2C;
+    --orange: #D9622B;
+    --green: #5B8C5A;
+    --red: #B84C3E;
+    --text: #EDE7DA;
+    --text-dim: #A79C87;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+    user-select:none;
+    overflow:hidden;
+  }
+  input,textarea{user-select:text;}
+
+  .hex{
+    clip-path:polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  }
+
+  #app{
+    display:flex;
+    height:100vh;
+    width:100vw;
+  }
+
+  /* ---------- NAV ---------- */
+  #nav{
+    width:84px;
+    flex-shrink:0;
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:14px 0;
+    overflow-y:auto;
+  }
+  #nav .brand{
+    width:44px;height:44px;
+    background:var(--gold);
+    color:#171310;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:18px;
+    margin-bottom:20px;
+    flex-shrink:0;
+  }
+  .nav-btn{
+    width:64px;
+    padding:10px 4px 8px;
+    background:none;border:none;
+    color:var(--text-dim);
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    font-size:10.5px;
+    border-radius:var(--radius);
+    margin-bottom:6px;
+    letter-spacing:.03em;
+    cursor:pointer;
+  }
+  .nav-btn .ic{font-size:20px;}
+  .nav-btn.active{
+    background:var(--panel-2);
+    color:var(--gold);
+  }
+  .nav-btn:active{ transform:scale(.95); }
+
+  /* ---------- MAIN ---------- */
+  #main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+  }
+  #topbar{
+    height:56px;
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 18px;
+    border-bottom:1px solid var(--line);
+    background:var(--panel);
+  }
+  #topbar h1{
+    font-size:15px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    color:var(--gold);
+    margin:0;
+    font-weight:700;
+  }
+  #clock{
+    font-size:12px;
+    color:var(--text-dim);
+  }
+  #view{
+    flex:1;
+    overflow-y:auto;
+    padding:16px;
+  }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+  }
+
+  /* ---------- DASHBOARD ---------- */
+  .kpi-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .kpi{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px;
+  }
+  .kpi .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;}
+  .kpi .value{font-size:24px;font-weight:800;margin-top:4px;color:var(--text);}
+  .kpi.warn .value{color:var(--orange);}
+  .kpi.ok .value{color:var(--green);}
+
+  .section-title{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+    color:var(--text-dim);
+    margin:18px 0 8px;
+  }
+
+  .alert-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 12px;
+    background:var(--panel-2);
+    border-left:3px solid var(--orange);
+    border-radius:6px;
+    margin-bottom:8px;
+    font-size:13.5px;
+  }
+  .alert-row .qty{color:var(--orange);font-weight:700;}
+
+  /* ---------- STOCK ---------- */
+  .toolbar{
+    display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;
+  }
+  input, select{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:11px 12px;
+    border-radius:8px;
+    font-size:14px;
+    outline:none;
+  }
+  input:focus, select:focus{border-color:var(--gold);}
+  .btn{
+    background:var(--gold);
+    color:#171310;
+    border:none;
+    padding:11px 16px;
+    border-radius:8px;
+    font-weight:700;
+    font-size:13.5px;
+    cursor:pointer;
+    letter-spacing:.02em;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn.secondary{
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--line);
+  }
+  .btn.danger{ background:var(--red); color:#fff; }
+  .btn.ghost{ background:transparent; color:var(--gold); border:1px solid var(--gold-dim); }
+  .btn:disabled{opacity:.4;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{
+    text-align:left;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    font-size:10.5px;
+    letter-spacing:.08em;
+    padding:8px 10px;
+    border-bottom:1px solid var(--line);
+  }
+  td{
+    padding:10px;
+    border-bottom:1px solid var(--line);
+  }
+  tr.low-stock td:first-child{ box-shadow:inset 3px 0 0 var(--orange); }
+  .pill{
+    display:inline-block;padding:2px 8px;border-radius:20px;
+    font-size:11px;background:var(--panel-2);color:var(--text-dim);
+  }
+  .row-actions button{
+    background:none;border:none;color:var(--text-dim);font-size:16px;padding:4px 6px;cursor:pointer;
+  }
+  .row-actions button:active{color:var(--gold);}
+
+  /* ---------- MODAL ---------- */
+  .modal-bg{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    display:flex;align-items:flex-end;justify-content:center;
+    z-index:50;
+  }
+  .modal{
+    background:var(--panel);
+    border-top:1px solid var(--line);
+    border-radius:16px 16px 0 0;
+    width:100%;max-width:520px;
+    max-height:88vh;overflow-y:auto;
+    padding:20px;
+    animation:slideUp .18s ease-out;
+  }
+  @keyframes slideUp{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  .modal h2{margin:0 0 14px;font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:11.5px;color:var(--text-dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;}
+  .field input, .field select{width:100%;}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .modal-actions{display:flex;gap:10px;margin-top:16px;}
+  .modal-actions .btn{flex:1;}
+
+  /* ---------- VENTE / POS ---------- */
+  #pos{
+    display:flex;height:100%;gap:14px;
+  }
+  #pos-left{
+    flex:1.3;display:flex;flex-direction:column;min-width:0;
+  }
+  #pos-right{
+    flex:1;display:flex;flex-direction:column;min-width:0;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px;
+  }
+  #scan-box{
+    display:flex;gap:8px;margin-bottom:12px;
+  }
+  #scan-input{flex:1;font-size:16px;padding:13px 14px;}
+  #catalog{
+    flex:1;overflow-y:auto;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+    gap:8px;align-content:flex-start;
+  }
+  .art-tile{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px;
+    cursor:pointer;
+    display:flex;flex-direction:column;gap:4px;
+  }
+  .art-tile:active{ border-color:var(--gold); }
+  .art-tile .nom{font-size:12.5px;font-weight:600;line-height:1.25;}
+  .art-tile .ref{font-size:10px;color:var(--text-dim);}
+  .art-tile .prix{font-size:13.5px;color:var(--gold);font-weight:700;margin-top:2px;}
+  .art-tile .stockbar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:4px;}
+  .art-tile .stockbar > div{height:100%;background:var(--green);}
+  .art-tile.rupture{opacity:.45;}
+
+  #panier-list{flex:1;overflow-y:auto;margin-bottom:10px;}
+  .panier-item{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 0;border-bottom:1px solid var(--line);
+    font-size:13px;
+  }
+  .panier-item .nom{flex:1;min-width:0;}
+  .panier-item .nom .sub{color:var(--text-dim);font-size:11px;}
+  .qte-ctrl{display:flex;align-items:center;gap:6px;}
+  .qte-ctrl button{
+    width:26px;height:26px;border-radius:6px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--text);font-size:15px;cursor:pointer;
+  }
+  .panier-item .sous-total{width:64px;text-align:right;font-weight:700;}
+  .panier-item .rm{color:var(--red);background:none;border:none;font-size:15px;cursor:pointer;}
+  #panier-empty{color:var(--text-dim);font-size:13px;text-align:center;padding:30px 0;}
+
+  #totaux{border-top:1px solid var(--line);padding-top:10px;}
+  .tot-row{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;color:var(--text-dim);}
+  .tot-row.grand{font-size:22px;font-weight:800;color:var(--text);padding-top:8px;}
+  #remise-input{width:80px;text-align:right;}
+
+  /* ---------- HISTORIQUE ---------- */
+  .vente-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 14px;margin-bottom:8px;
+    display:flex;justify-content:space-between;align-items:center;cursor:pointer;
+  }
+  .vente-card .heure{font-size:11px;color:var(--text-dim);}
+  .vente-card .total{font-size:16px;font-weight:800;color:var(--gold);}
+
+  /* ---------- RECU (print) ---------- */
+  #recu{ display:none; }
+  @media print{
+    body *{ visibility:hidden; }
+    #recu, #recu *{ visibility:visible; }
+    #recu{
+      display:block;position:absolute;top:0;left:0;width:100%;
+      font-family:'Courier New',monospace;color:#000;padding:10px;
+    }
+    #recu h3{margin:4px 0;font-size:15px;text-align:center;}
+    #recu .line{border-top:1px dashed #000;margin:6px 0;}
+    #recu table{width:100%;font-size:12px;}
+    #recu td{padding:2px 0;}
+  }
+
+  #toast-wrap{
+    position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    z-index:100;display:flex;flex-direction:column;gap:8px;align-items:center;
+  }
+  .toast{
+    background:var(--panel-2);border:1px solid var(--gold-dim);color:var(--text);
+    padding:10px 18px;border-radius:30px;font-size:13.5px;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+    animation:fadeIn .15s ease-out;
+  }
+  .toast.err{border-color:var(--red);color:#fff;background:var(--red);}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;}}
+
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+  @media (max-width:760px){
+    #pos{flex-direction:column;}
+    #nav{width:64px;}
+    .nav-btn{width:52px;font-size:9px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <nav id="nav">
+    <div class="brand hex">Q</div>
+    <button class="nav-btn" data-view="dashboard"><span class="ic">◆</span>Accueil</button>
+    <button class="nav-btn" data-view="vente"><span class="ic">▣</span>Vente</button>
+    <button class="nav-btn" data-view="stock"><span class="ic">▤</span>Stock</button>
+    <button class="nav-btn" data-view="historique"><span class="ic">▥</span>Historique</button>
+    <button class="nav-btn" data-view="parametres"><span class="ic">⚙</span>Réglages</button>
+  </nav>
+
+  <div id="main">
+    <div id="topbar">
+      <h1 id="view-title">Tableau de bord</h1>
+      <div id="clock"></div>
+    </div>
+    <div id="view"></div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+<div id="recu"></div>
+
+<script>
+/* ==================================================================
+   BASE DE DONNEES — IndexedDB
+   Stores:
+   - articles   {id, reference, nom, categorie, prixAchat, prixVente, quantite, seuilAlerte}
+   - clients    {id, nom, telephone}
+   - ventes     {id, date(iso), items[], remise, total, clientNom, modePaiement}
+   - parametres {cle, valeur}
+   ================================================================== */
+const DB_NAME = 'quincaillerie_pos_db';
+const DB_VERSION = 1;
+let db;
+
+function openDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('articles')){
+        const s = d.createObjectStore('articles', {keyPath:'id', autoIncrement:true});
+        s.createIndex('reference','reference',{unique:true});
+        s.createIndex('nom','nom',{unique:false});
+      }
+      if(!d.objectStoreNames.contains('clients')){
+        d.createObjectStore('clients', {keyPath:'id', autoIncrement:true});
+      }
+      if(!d.objectStoreNames.contains('ventes')){
+        const v = d.createObjectStore('ventes', {keyPath:'id', autoIncrement:true});
+        v.createIndex('date','date',{unique:false});
+      }
+      if(!d.objectStoreNames.contains('parametres')){
+        d.createObjectStore('parametres', {keyPath:'cle'});
+      }
+    };
+    req.onsuccess = ()=>{ db = req.result; resolve(db); };
+    req.onerror = ()=> reject(req.error);
+  });
+}
+
+function tx(store, mode='readonly'){
+  return db.transaction(store, mode).objectStore(store);
+}
+function reqToPromise(req){
+  return new Promise((res,rej)=>{ req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); });
+}
+
+const Articles = {
+  all: ()=> reqToPromise(tx('articles').getAll()),
+  get: (id)=> reqToPromise(tx('articles').get(id)),
+  add: (obj)=> reqToPromise(tx('articles','readwrite').add(obj)),
+  update: (obj)=> reqToPromise(tx('articles','readwrite').put(obj)),
+  delete: (id)=> reqToPromise(tx('articles','readwrite').delete(id)),
+  byReference: (ref)=> new Promise((res,rej)=>{
+    const idx = tx('articles').index('reference');
+    const r = idx.get(ref);
+    r.onsuccess = ()=>res(r.result);
+    r.onerror = ()=>rej(r.error);
+  })
+};
+
+const Ventes = {
+  all: ()=> reqToPromise(tx('ventes').getAll()),
+  add: (obj)=> reqToPromise(tx('ventes','readwrite').add(obj)),
+};
+
+const Params = {
+  get: (cle)=> reqToPromise(tx('parametres').get(cle)),
+  set: (cle, valeur)=> reqToPromise(tx('parametres','readwrite').put({cle, valeur})),
+};
+
+/* ==================================================================
+   UTILITAIRES
+   ================================================================== */
+function fmt(n){
+  return Math.round(n).toLocaleString('fr-FR') + ' F';
+}
+function toast(msg, isErr=false){
+  const wrap = document.getElementById('toast-wrap');
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr?' err':'');
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(()=>t.remove(), 2600);
+}
+function todayStr(){
+  return new Date().toISOString().slice(0,10);
+}
+function updateClock(){
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'}) + ' — ' +
+    d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+}
+setInterval(updateClock, 1000*30);
+
+/* ==================================================================
+   ROUTAGE / NAVIGATION
+   ================================================================== */
+const VIEW_TITLES = {
+  dashboard:'Tableau de bord', vente:'Point de vente', stock:'Gestion du stock',
+  historique:'Historique des ventes', parametres:'Réglages'
+};
+let currentView = 'dashboard';
+
+document.querySelectorAll('.nav-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> goTo(btn.dataset.view));
+});
+
+async function goTo(view){
+  currentView = view;
+  document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.view===view));
+  document.getElementById('view-title').textContent = VIEW_TITLES[view];
+  const el = document.getElementById('view');
+  el.innerHTML = '<p style="color:var(--text-dim)">Chargement…</p>';
+  if(view==='dashboard') await renderDashboard(el);
+  else if(view==='vente') await renderVente(el);
+  else if(view==='stock') await renderStock(el);
+  else if(view==='historique') await renderHistorique(el);
+  else if(view==='parametres') await renderParametres(el);
+}
+
+/* ==================================================================
+   VUE — TABLEAU DE BORD
+   ================================================================== */
+async function renderDashboard(el){
+  const [articles, ventes] = await Promise.all([Articles.all(), Ventes.all()]);
+  const today = todayStr();
+  const ventesJour = ventes.filter(v => v.date.slice(0,10) === today);
+  const totalJour = ventesJour.reduce((s,v)=> s + v.total, 0);
+  const nbVentesJour = ventesJour.length;
+  const stockFaible = articles.filter(a => a.quantite <= a.seuilAlerte);
+
+  el.innerHTML = `
+    <div class="kpi-row">
+      <div class="kpi ok"><div class="label">Ventes du jour</div><div class="value">${fmt(totalJour)}</div></div>
+      <div class="kpi"><div class="label">Transactions</div><div class="value">${nbVentesJour}</div></div>
+      <div class="kpi"><div class="label">Articles en stock</div><div class="value">${articles.length}</div></div>
+      <div class="kpi ${stockFaible.length?'warn':'ok'}"><div class="label">Alertes stock</div><div class="value">${stockFaible.length}</div></div>
+    </div>
+
+    <div class="section-title">Alertes de stock faible</div>
+    <div id="alerts-list">
+      ${stockFaible.length===0
+        ? '<p style="color:var(--text-dim);font-size:13px;">Aucune alerte — tous les stocks sont au-dessus du seuil.</p>'
+        : stockFaible.map(a=>`
+          <div class="alert-row">
+            <span>${a.nom} <span class="pill">${a.reference}</span></span>
+            <span class="qty">${a.quantite} restant(s) / seuil ${a.seuilAlerte}</span>
+          </div>`).join('')
+      }
+    </div>
+
+    <div class="section-title">Dernières ventes</div>
+    <div>
+      ${ventesJour.slice(-5).reverse().map(v=>`
+        <div class="vente-card" style="cursor:default;">
+          <div>
+            <div>${v.clientNom || 'Client comptant'}</div>
+            <div class="heure">${new Date(v.date).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} · ${v.items.length} article(s)</div>
+          </div>
+          <div class="total">${fmt(v.total)}</div>
+        </div>`).join('') || '<p style="color:var(--text-dim);font-size:13px;">Aucune vente enregistrée aujourd\\'hui.</p>'}
+    </div>
+  `;
+}
+
+/* ==================================================================
+   VUE — STOCK
+   ================================================================== */
+async function renderStock(el){
+  el.innerHTML = `
+    <div class="toolbar">
+      <input id="stock-search" placeholder="Rechercher un article ou une référence…" style="flex:1;min-width:180px;">
+      <button class="btn" id="btn-new-article">+ Nouvel article</button>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto;">
+      <table>
+        <thead><tr>
+          <th>Référence</th><th>Nom</th><th>Catégorie</th><th>Achat</th><th>Vente</th><th>Stock</th><th></th>
+        </tr></thead>
+        <tbody id="stock-tbody"></tbody>
+      </table>
+    </div>
+  `;
+  let articles = await Articles.all();
+
+  function draw(list){
+    const tbody = document.getElementById('stock-tbody');
+    tbody.innerHTML = list.map(a=>`
+      <tr class="${a.quantite<=a.seuilAlerte?'low-stock':''}">
+        <td>${a.reference}</td>
+        <td>${a.nom}</td>
+        <td><span class="pill">${a.categorie||'—'}</span></td>
+        <td>${fmt(a.prixAchat)}</td>
+        <td>${fmt(a.prixVente)}</td>
+        <td>${a.quantite}${a.quantite<=a.seuilAlerte?' ⚠':''}</td>
+        <td class="row-actions">
+          <button data-edit="${a.id}">✎</button>
+          <button data-del="${a.id}">🗑</button>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;">Aucun article. Ajoutez-en un.</td></tr>';
+
+    tbody.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openArticleModal(Number(b.dataset.edit))));
+    tbody.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', async ()=>{
+      if(confirm('Supprimer cet article ?')){
+        await Articles.delete(Number(b.dataset.del));
+        articles = await Articles.all();
+        draw(articles);
+        toast('Article supprimé');
+      }
+    }));
+  }
+  draw(articles);
+
+  document.getElementById('stock-search').addEventListener('input', (e)=>{
+    const q = e.target.value.toLowerCase();
+    draw(articles.filter(a => a.nom.toLowerCase().includes(q) || a.reference.toLowerCase().includes(q)));
+  });
+  document.getElementById('btn-new-article').addEventListener('click', ()=> openArticleModal(null));
+
+  async function openArticleModal(id){
+    const existing = id ? await Articles.get(id) : null;
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML = `
+      <div class="modal">
+        <h2>${existing? 'Modifier l\\'article' : 'Nouvel article'}</h2>
+        <div class="field-row">
+          <div class="field"><label>Référence</label><input id="f-ref" value="${existing?.reference||''}"></div>
+          <div class="field"><label>Catégorie</label><input id="f-cat" value="${existing?.categorie||''}"></div>
+        </div>
+        <div class="field"><label>Nom de l'article</label><input id="f-nom" value="${existing?.nom||''}"></div>
+        <div class="field-row">
+          <div class="field"><label>Prix d'achat</label><input id="f-achat" type="number" inputmode="numeric" value="${existing?.prixAchat??''}"></div>
+          <div class="field"><label>Prix de vente</label><input id="f-vente" type="number" inputmode="numeric" value="${existing?.prixVente??''}"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Quantité en stock</label><input id="f-qte" type="number" inputmode="numeric" value="${existing?.quantite??''}"></div>
+          <div class="field"><label>Seuil d'alerte</label><input id="f-seuil" type="number" inputmode="numeric" value="${existing?.seuilAlerte??5}"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="m-cancel">Annuler</button>
+          <button class="btn" id="m-save">Enregistrer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(bg);
+    bg.addEventListener('click', (e)=>{ if(e.target===bg) bg.remove(); });
+    document.getElementById('m-cancel').addEventListener('click', ()=> bg.remove());
+    document.getElementById('m-save').addEventListener('click', async ()=>{
+      const ref = document.getElementById('f-ref').value.trim();
+      const nom = document.getElementById('f-nom').value.trim();
+      if(!ref || !nom){ toast('Référence et nom obligatoires', true); return; }
+      const obj = {
+        reference: ref,
+        nom,
+        categorie: document.getElementById('f-cat').value.trim(),
+        prixAchat: Number(document.getElementById('f-achat').value)||0,
+        prixVente: Number(document.getElementById('f-vente').value)||0,
+        quantite: Number(document.getElementById('f-qte').value)||0,
+        seuilAlerte: Number(document.getElementById('f-seuil').value)||0,
+      };
+      try{
+        if(existing){ obj.id = existing.id; await Articles.update(obj); toast('Article mis à jour'); }
+        else{ await Articles.add(obj); toast('Article ajouté'); }
+        bg.remove();
+        articles = await Articles.all();
+        draw(articles);
+      }catch(err){
+        toast('Erreur : référence déjà utilisée ?', true);
+      }
+    });
+  }
+}
+
+/* ==================================================================
+   VUE — POINT DE VENTE
+   ================================================================== */
+let panier = []; // {articleId, reference, nom, prixVente, qte, stockDispo}
+
+async function renderVente(el){
+  panier = [];
+  const articles = await Articles.all();
+  const clients = await Params.get('nomBoutique');
+
+  el.innerHTML = `
+    <div id="pos">
+      <div id="pos-left">
+        <div id="scan-box">
+          <input id="scan-input" placeholder="Scanner un code-barres ou taper une référence puis Entrée…" autofocus>
+          <button class="btn secondary" id="btn-clear-scan">Effacer</button>
+        </div>
+        <div id="catalog"></div>
+      </div>
+      <div id="pos-right">
+        <div class="field"><label>Client (optionnel)</label><input id="v-client" placeholder="Nom du client"></div>
+        <div id="panier-list"><div id="panier-empty">Le panier est vide.<br>Scannez ou touchez un article.</div></div>
+        <div id="totaux">
+          <div class="tot-row"><span>Sous-total</span><span id="tot-sous">0 F</span></div>
+          <div class="tot-row">
+            <span>Remise</span>
+            <span><input id="remise-input" type="number" inputmode="numeric" value="0"> F</span>
+          </div>
+          <div class="tot-row grand"><span>Total</span><span id="tot-total">0 F</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn secondary" id="btn-vider" style="flex:1;">Vider</button>
+          <button class="btn" id="btn-valider" style="flex:2;">Valider la vente</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  function drawCatalog(list){
+    const cat = document.getElementById('catalog');
+    cat.innerHTML = list.map(a=>{
+      const ratio = a.seuilAlerte>0 ? Math.min(100, (a.quantite/(a.seuilAlerte*3))*100) : 100;
+      return `
+      <div class="art-tile ${a.quantite<=0?'rupture':''}" data-id="${a.id}">
+        <div class="nom">${a.nom}</div>
+        <div class="ref">${a.reference} · stock ${a.quantite}</div>
+        <div class="prix">${fmt(a.prixVente)}</div>
+        <div class="stockbar"><div style="width:${ratio}%;background:${a.quantite<=a.seuilAlerte?'var(--orange)':'var(--green)'}"></div></div>
+      </div>`;
+    }).join('') || '<p style="color:var(--text-dim);">Aucun article. Ajoutez du stock d\\'abord.</p>';
+    cat.querySelectorAll('.art-tile').forEach(t=> t.addEventListener('click', ()=> addToCartById(Number(t.dataset.id))));
+  }
+  drawCatalog(articles);
+
+  const scanInput = document.getElementById('scan-input');
+  scanInput.addEventListener('keydown', async (e)=>{
+    if(e.key==='Enter'){
+      const val = scanInput.value.trim();
+      scanInput.value='';
+      if(!val) return;
+      const found = await Articles.byReference(val) || articles.find(a=>a.nom.toLowerCase()===val.toLowerCase());
+      if(found) addToCartById(found.id);
+      else toast('Article introuvable : '+val, true);
+    }
+  });
+  document.getElementById('btn-clear-scan').addEventListener('click', ()=>{ scanInput.value=''; scanInput.focus(); });
+
+  function addToCartById(id){
+    const art = articles.find(a=>a.id===id);
+    if(!art) return;
+    if(art.quantite<=0){ toast('Rupture de stock : '+art.nom, true); return; }
+    const line = panier.find(l=>l.articleId===id);
+    if(line){
+      if(line.qte+1 > art.quantite){ toast('Stock insuffisant', true); return; }
+      line.qte += 1;
+    } else {
+      panier.push({articleId:id, reference:art.reference, nom:art.nom, prixVente:art.prixVente, qte:1, stockDispo:art.quantite});
+    }
+    drawPanier();
+  }
+
+  function drawPanier(){
+    const list = document.getElementById('panier-list');
+    if(panier.length===0){
+      list.innerHTML = '<div id="panier-empty">Le panier est vide.<br>Scannez ou touchez un article.</div>';
+    } else {
+      list.innerHTML = panier.map((l,i)=>`
+        <div class="panier-item">
+          <div class="nom">${l.nom}<div class="sub">${fmt(l.prixVente)} / unité</div></div>
+          <div class="qte-ctrl">
+            <button data-dec="${i}">−</button>
+            <span>${l.qte}</span>
+            <button data-inc="${i}">+</button>
+          </div>
+          <div class="sous-total">${fmt(l.prixVente*l.qte)}</div>
+          <button class="rm" data-rm="${i}">✕</button>
+        </div>
+      `).join('');
+      list.querySelectorAll('[data-inc]').forEach(b=> b.addEventListener('click', ()=>{
+        const i = Number(b.dataset.inc); const l = panier[i];
+        if(l.qte+1 > l.stockDispo){ toast('Stock insuffisant', true); return; }
+        l.qte++; drawPanier();
+      }));
+      list.querySelectorAll('[data-dec]').forEach(b=> b.addEventListener('click', ()=>{
+        const i = Number(b.dataset.dec); panier[i].qte--;
+        if(panier[i].qte<=0) panier.splice(i,1);
+        drawPanier();
+      }));
+      list.querySelectorAll('[data-rm]').forEach(b=> b.addEventListener('click', ()=>{
+        panier.splice(Number(b.dataset.rm),1); drawPanier();
+      }));
+    }
+    updateTotals();
+  }
+
+  function updateTotals(){
+    const sousTotal = panier.reduce((s,l)=> s + l.prixVente*l.qte, 0);
+    const remise = Number(document.getElementById('remise-input').value)||0;
+    const total = Math.max(0, sousTotal - remise);
+    document.getElementById('tot-sous').textContent = fmt(sousTotal);
+    document.getElementById('tot-total').textContent = fmt(total);
+  }
+  document.getElementById('remise-input').addEventListener('input', updateTotals);
+
+  document.getElementById('btn-vider').addEventListener('click', ()=>{ panier=[]; drawPanier(); });
+
+  document.getElementById('btn-valider').addEventListener('click', async ()=>{
+    if(panier.length===0){ toast('Le panier est vide', true); return; }
+    const sousTotal = panier.reduce((s,l)=> s + l.prixVente*l.qte, 0);
+    const remise = Number(document.getElementById('remise-input').value)||0;
+    const total = Math.max(0, sousTotal - remise);
+    const clientNom = document.getElementById('v-client').value.trim();
+
+    // Décrémenter le stock
+    for(const l of panier){
+      const art = await Articles.get(l.articleId);
+      art.quantite -= l.qte;
+      await Articles.update(art);
+    }
+    const vente = {
+      date: new Date().toISOString(),
+      items: panier.map(l=>({reference:l.reference, nom:l.nom, prixVente:l.prixVente, qte:l.qte, sousTotal:l.prixVente*l.qte})),
+      remise, total, clientNom
+    };
+    const id = await Ventes.add(vente);
+    vente.id = id;
+    toast('Vente validée : '+fmt(total));
+    imprimerRecu(vente);
+    panier=[];
+    document.getElementById('v-client').value='';
+    document.getElementById('remise-input').value=0;
+    const refreshed = await Articles.all();
+    drawCatalog(refreshed);
+    drawPanier();
+  });
+
+  scanInput.focus();
+}
+
+/* ==================================================================
+   REÇU IMPRIMABLE
+   ================================================================== */
+async function imprimerRecu(vente){
+  const nomBoutique = (await Params.get('nomBoutique'))?.valeur || 'Quincaillerie';
+  const adresse = (await Params.get('adresse'))?.valeur || '';
+  const tel = (await Params.get('telephone'))?.valeur || '';
+  const d = new Date(vente.date);
+  const recu = document.getElementById('recu');
+  recu.innerHTML = `
+    <h3>${nomBoutique}</h3>
+    <div style="text-align:center;font-size:11px;">${adresse}${tel? ' · '+tel : ''}</div>
+    <div class="line"></div>
+    <div style="font-size:11px;">
+      Date : ${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>
+      Client : ${vente.clientNom || 'Comptant'}<br>
+      Reçu N° : ${vente.id}
+    </div>
+    <div class="line"></div>
+    <table>
+      ${vente.items.map(it=>`
+        <tr><td colspan="2">${it.nom} (${it.reference})</td></tr>
+        <tr><td>${it.qte} x ${fmt(it.prixVente)}</td><td style="text-align:right;">${fmt(it.sousTotal)}</td></tr>
+      `).join('')}
+    </table>
+    <div class="line"></div>
+    <table>
+      <tr><td>Sous-total</td><td style="text-align:right;">${fmt(vente.items.reduce((s,i)=>s+i.sousTotal,0))}</td></tr>
+      <tr><td>Remise</td><td style="text-align:right;">${fmt(vente.remise)}</td></tr>
+      <tr><td><b>TOTAL</b></td><td style="text-align:right;"><b>${fmt(vente.total)}</b></td></tr>
+    </table>
+    <div class="line"></div>
+    <div style="text-align:center;font-size:11px;">Merci de votre confiance !</div>
+  `;
+  setTimeout(()=> window.print(), 200);
+}
+
+/* ==================================================================
+   VUE — HISTORIQUE
+   ================================================================== */
+async function renderHistorique(el){
+  const ventes = (await Ventes.all()).sort((a,b)=> new Date(b.date)-new Date(a.date));
+  el.innerHTML = `
+    <div class="toolbar">
+      <input type="date" id="h-date" value="${todayStr()}">
+      <button class="btn secondary" id="h-all">Tout afficher</button>
+    </div>
+    <div id="h-list"></div>
+  `;
+  function draw(list){
+    const cont = document.getElementById('h-list');
+    if(list.length===0){ cont.innerHTML = '<p style="color:var(--text-dim);">Aucune vente sur cette période.</p>'; return; }
+    const totalPeriode = list.reduce((s,v)=>s+v.total,0);
+    cont.innerHTML = `<p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">${list.length} vente(s) · total ${fmt(totalPeriode)}</p>` +
+      list.map(v=>`
+        <div class="vente-card" data-id="${v.id}">
+          <div>
+            <div>${v.clientNom || 'Client comptant'}</div>
+            <div class="heure">${new Date(v.date).toLocaleString('fr-FR')} · ${v.items.length} article(s)</div>
+          </div>
+          <div class="total">${fmt(v.total)}</div>
+        </div>
+      `).join('');
+    cont.querySelectorAll('.vente-card').forEach(c=> c.addEventListener('click', ()=>{
+      const v = list.find(x=>x.id===Number(c.dataset.id));
+      openVenteDetail(v);
+    }));
+  }
+  draw(ventes.filter(v=> v.date.slice(0,10)===todayStr()));
+  document.getElementById('h-date').addEventListener('change', (e)=>{
+    draw(ventes.filter(v=> v.date.slice(0,10)===e.target.value));
+  });
+  document.getElementById('h-all').addEventListener('click', ()=> draw(ventes));
+
+  function openVenteDetail(v){
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML = `
+      <div class="modal">
+        <h2>Vente N° ${v.id}</h2>
+        <p style="font-size:12.5px;color:var(--text-dim);">${new Date(v.date).toLocaleString('fr-FR')} — ${v.clientNom||'Client comptant'}</p>
+        <table>
+          <thead><tr><th>Article</th><th>Qté</th><th>Total</th></tr></thead>
+          <tbody>
+            ${v.items.map(it=>`<tr><td>${it.nom}</td><td>${it.qte}</td><td>${fmt(it.sousTotal)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="tot-row" style="margin-top:8px;"><span>Remise</span><span>${fmt(v.remise)}</span></div>
+        <div class="tot-row grand"><span>Total</span><span>${fmt(v.total)}</span></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="m-close">Fermer</button>
+          <button class="btn" id="m-print">Imprimer le reçu</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(bg);
+    bg.addEventListener('click', (e)=>{ if(e.target===bg) bg.remove(); });
+    document.getElementById('m-close').addEventListener('click', ()=> bg.remove());
+    document.getElementById('m-print').addEventListener('click', ()=> imprimerRecu(v));
+  }
+}
+
+/* ==================================================================
+   VUE — PARAMETRES
+   ================================================================== */
+async function renderParametres(el){
+  const nom = (await Params.get('nomBoutique'))?.valeur || '';
+  const adresse = (await Params.get('adresse'))?.valeur || '';
+  const tel = (await Params.get('telephone'))?.valeur || '';
+  el.innerHTML = `
+    <div class="card" style="max-width:480px;">
+      <div class="field"><label>Nom de la boutique</label><input id="p-nom" value="${nom}"></div>
+      <div class="field"><label>Adresse</label><input id="p-adresse" value="${adresse}"></div>
+      <div class="field"><label>Téléphone</label><input id="p-tel" value="${tel}"></div>
+      <button class="btn" id="p-save">Enregistrer</button>
+    </div>
+    <div class="section-title">Données</div>
+    <div class="card" style="max-width:480px;display:flex;gap:10px;">
+      <button class="btn secondary" id="p-export">Exporter (sauvegarde)</button>
+      <button class="btn danger" id="p-reset">Réinitialiser tout</button>
+    </div>
+  `;
+  document.getElementById('p-save').addEventListener('click', async ()=>{
+    await Params.set('nomBoutique', document.getElementById('p-nom').value.trim());
+    await Params.set('adresse', document.getElementById('p-adresse').value.trim());
+    await Params.set('telephone', document.getElementById('p-tel').value.trim());
+    toast('Paramètres enregistrés');
+  });
+  document.getElementById('p-export').addEventListener('click', async ()=>{
+    const data = { articles: await Articles.all(), ventes: await Ventes.all() };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sauvegarde_quincaillerie_'+todayStr()+'.json';
+    a.click();
+  });
+  document.getElementById('p-reset').addEventListener('click', ()=>{
+    if(confirm('Cette action supprime TOUTES les données (stock, ventes). Continuer ?')){
+      indexedDB.deleteDatabase(DB_NAME);
+      setTimeout(()=> location.reload(), 300);
+    }
+  });
+}
+
+/* ==================================================================
+   DEMARRAGE
+   ================================================================== */
+(async function init(){
+  await openDB();
+  updateClock();
+  // Article de démonstration au tout premier lancement
+  const existing = await Articles.all();
+  if(existing.length===0){
+    await Articles.add({reference:'DEMO-001', nom:'Sac de ciment 50kg', categorie:'Matériaux', prixAchat:3500, prixVente:4500, quantite:20, seuilAlerte:5});
+    await Articles.add({reference:'DEMO-002', nom:'Clou 5cm (kg)', categorie:'Quincaillerie', prixAchat:800, prixVente:1200, quantite:15, seuilAlerte:3});
+  }
+  goTo('dashboard');
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
