@@ -1,3 +1,325 @@
+{ toast('Référence et nom obligatoires', true); return; }
+      const  = {
+        reference: ref,
+        nom,
+        categorie: document.getElementById('f-cat').value.trim(),
+        prixAchat: Number(document.getElementById('f-achat').value)||0,
+        prixVente: Number(document.getElementById('f-vente').value)||0,
+        quantite: Number(document.getElementById('f-qte').value)||0,
+        seuilAlerte: Number(document.getElementById('f-seuil').value)||0,
+      };
+      try{
+        if(existing){ obj.id = existing.id; await Articles.update(obj); toast('Article mis à jour'); }
+        else{ await Articles.add(obj); toast('Article ajouté'); }
+        bg.remove();
+        articles = await Articles.all();
+        draw(articles);
+      }catch(err){
+        toast('Erreur : référence déjà utilisée ?', true);
+      }
+    });
+  }
+}
+
+/* ==================================================================
+   VUE — POINT DE VENTE
+   ================================================================== */
+let panier = []; // {articleId, reference, nom, prixVente, qte, stockDispo}
+
+async function renderVente(el){
+  panier = [];
+  const articles = await Articles.all();
+  const clients = await Params.get('nomBoutique');
+
+  el.innerHTML = `
+    <div id="pos">
+      <div id="pos-left">
+        <div id="scan-box">
+          <input id="scan-input" placeholder="Scanner un code-barres ou taper une référence puis Entrée…" autofocus>
+          <button class="btn secondary" id="btn-clear-scan">Effacer</button>
+        </div>
+        <div id="catalog"></div>
+      </div>
+      <div id="pos-right">
+        <div class="field"><label>Client (optionnel)</label><input id="v-client" placeholder="Nom du client"></div>
+        <div id="panier-list"><div id="panier-empty">Le panier est vide.<br>Scannez ou touchez un article.</div></div>
+        <div id="totaux">
+          <div class="tot-row"><span>Sous-total</span><span id="tot-sous">0 F</span></div>
+          <div class="tot-row">
+            <span>Remise</span>
+            <span><input id="remise-input" type="number" inputmode="numeric" value="0"> F</span>
+          </div>
+          <div class="tot-row grand"><span>Total</span><span id="tot-total">0 F</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn secondary" id="btn-vider" style="flex:1;">Vider</button>
+          <button class="btn" id="btn-valider" style="flex:2;">Valider la vente</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  function drawCatalog(list){
+    const cat = document.getElementById('catalog');
+    cat.innerHTML = list.map(a=>{
+      const ratio = a.seuilAlerte>0 ? Math.min(100, (a.quantite/(a.seuilAlerte*3))*100) : 100;
+      return `
+      <div class="art-tile ${a.quantite<=0?'rupture':''}" data-id="${a.id}">
+        <div class="nom">${a.nom}</div>
+        <div class="ref">${a.reference} · stock ${a.quantite}</div>
+        <div class="prix">${fmt(a.prixVente)}</div>
+        <div class="stockbar"><div style="width:${ratio}%;background:${a.quantite<=a.seuilAlerte?'var(--orange)':'var(--green)'}"></div></div>
+      </div>`;
+    }).join('') || '<p style="color:var(--text-dim);">Aucun article. Ajoutez du stock d\\'abord.</p>';
+    cat.querySelectorAll('.art-tile').forEach(t=> t.addEventListener('click', ()=> addToCartById(Number(t.dataset.id))));
+  }
+  drawCatalog(articles);
+
+  const scanInput = document.getElementById('scan-input');
+  scanInput.addEventListener('keydown', async (e)=>{
+    if(e.key==='Enter'){
+      const val = scanInput.value.trim();
+      scanInput.value='';
+      if(!val) return;
+      const found = await Articles.byReference(val) || articles.find(a=>a.nom.toLowerCase()===val.toLowerCase());
+      if(found) addToCartById(found.id);
+      else toast('Article introuvable : '+val, true);
+    }
+  });
+  document.getElementById('btn-clear-scan').addEventListener('click', ()=>{ scanInput.value=''; scanInput.focus(); });
+
+  function addToCartById(id){
+    const art = articles.find(a=>a.id===id);
+    if(!art) return;
+    if(art.quantite<=0){ toast('Rupture de stock : '+art.nom, true); return; }
+    const line = panier.find(l=>l.articleId===id);
+    if(line){
+      if(line.qte+1 > art.quantite){ toast('Stock insuffisant', true); return; }
+      line.qte += 1;
+    } else {
+      panier.push({articleId:id, reference:art.reference, nom:art.nom, prixVente:art.prixVente, qte:1, stockDispo:art.quantite});
+    }
+    drawPanier();
+  }
+
+  function drawPanier(){
+    const list = document.getElementById('panier-list');
+    if(panier.length===0){
+      list.innerHTML = '<div id="panier-empty">Le panier est vide.<br>Scannez ou touchez un article.</div>';
+    } else {
+      list.innerHTML = panier.map((l,i)=>`
+        <div class="panier-item">
+          <div class="nom">${l.nom}<div class="sub">${fmt(l.prixVente)} / unité</div></div>
+          <div class="qte-ctrl">
+            <button data-dec="${i}">−</button>
+            <span>${l.qte}</span>
+            <button data-inc="${i}">+</button>
+          </div>
+          <div class="sous-total">${fmt(l.prixVente*l.qte)}</div>
+          <button class="rm" data-rm="${i}">✕</button>
+        </div>
+      `).join('');
+      list.querySelectorAll('[data-inc]').forEach(b=> b.addEventListener('click', ()=>{
+        const i = Number(b.dataset.inc); const l = panier[i];
+        if(l.qte+1 > l.stockDispo){ toast('Stock insuffisant', true); return; }
+        l.qte++; drawPanier();
+      }));
+      list.querySelectorAll('[data-dec]').forEach(b=> b.addEventListener('click', ()=>{
+        const i = Number(b.dataset.dec); panier[i].qte--;
+        if(panier[i].qte<=0) panier.splice(i,1);
+        drawPanier();
+      }));
+      list.querySelectorAll('[data-rm]').forEach(b=> b.addEventListener('click', ()=>{
+        panier.splice(Number(b.dataset.rm),1); drawPanier();
+      }));
+    }
+    updateTotals();
+  }
+
+  function updateTotals(){
+    const sousTotal = panier.reduce((s,l)=> s + l.prixVente*l.qte, 0);
+    const remise = Number(document.getElementById('remise-input').value)||0;
+    const total = Math.max(0, sousTotal - remise);
+    document.getElementById('tot-sous').textContent = fmt(sousTotal);
+    document.getElementById('tot-total').textContent = fmt(total);
+  }
+  document.getElementById('remise-input').addEventListener('input', updateTotals);
+
+  document.getElementById('btn-vider').addEventListener('click', ()=>{ panier=[]; drawPanier(); });
+
+  document.getElementById('btn-valider').addEventListener('click', async ()=>{
+    if(panier.length===0){ toast('Le panier est vide', true); return; }
+    const sousTotal = panier.reduce((s,l)=> s + l.prixVente*l.qte, 0);
+    const remise = Number(document.getElementById('remise-input').value)||0;
+    const total = Math.max(0, sousTotal - remise);
+    const clientNom = document.getElementById('v-client').value.trim();
+
+    // Décrémenter le stock
+    for(const l of panier){
+      const art = await Articles.get(l.articleId);
+      art.quantite -= l.qte;
+      await Articles.update(art);
+    }
+    const vente = {
+      date: new Date().toISOString(),
+      items: panier.map(l=>({reference:l.reference, nom:l.nom, prixVente:l.prixVente, qte:l.qte, sousTotal:l.prixVente*l.qte})),
+      remise, total, clientNom
+    };
+    const id = await Ventes.add(vente);
+    vente.id = id;
+    toast('Vente validée : '+fmt(total));
+    imprimerRecu(vente);
+    panier=[];
+    document.getElementById('v-client').value='';
+    document.getElementById('remise-input').value=0;
+    const refreshed = await Articles.all();
+    drawCatalog(refreshed);
+    drawPanier();
+  });
+
+  scanInput.focus();
+}
+
+/* ==================================================================
+   REÇU IMPRIMABLE
+   ================================================================== */
+async function imprimerRecu(vente){
+  const nomBoutique = (await Params.get('nomBoutique'))?.valeur || 'Quincaillerie';
+  const adresse = (await Params.get('adresse'))?.valeur || '';
+  const tel = (await Params.get('telephone'))?.valeur || '';
+  const d = new Date(vente.date);
+  const recu = document.getElementById('recu');
+  recu.innerHTML = `
+    <h3>${nomBoutique}</h3>
+    <div style="text-align:center;font-size:11px;">${adresse}${tel? ' · '+tel : ''}</div>
+    <div class="line"></div>
+    <div style="font-size:11px;">
+      Date : ${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>
+      Client : ${vente.clientNom || 'Comptant'}<br>
+      Reçu N° : ${vente.id}
+    </div>
+    <div class="line"></div>
+    <table>
+      ${vente.items.map(it=>`
+        <tr><td colspan="2">${it.nom} (${it.reference})</td></tr>
+        <tr><td>${it.qte} x ${fmt(it.prixVente)}</td><td style="text-align:right;">${fmt(it.sousTotal)}</td></tr>
+      `).join('')}
+    </table>
+    <div class="line"></div>
+    <table>
+      <tr><td>Sous-total</td><td style="text-align:right;">${fmt(vente.items.reduce((s,i)=>s+i.sousTotal,0))}</td></tr>
+      <tr><td>Remise</td><td style="text-align:right;">${fmt(vente.remise)}</td></tr>
+      <tr><td><b>TOTAL</b></td><td style="text-align:right;"><b>${fmt(vente.total)}</b></td></tr>
+    </table>
+    <div class="line"></div>
+    <div style="text-align:center;font-size:11px;">Merci de votre confiance !</div>
+  `;
+  setTimeout(()=> window.print(), 200);
+}
+
+/* ==================================================================
+   VUE — HISTORIQUE
+   ================================================================== */
+async function renderHistorique(el){
+  const ventes = (await Ventes.all()).sort((a,b)=> new Date(b.date)-new Date(a.date));
+  el.innerHTML = `
+    <div class="toolbar">
+      <input type="date" id="h-date" value="${todayStr()}">
+      <button class="btn secondary" id="h-all">Tout afficher</button>
+    </div>
+    <div id="h-list"></div>
+  `;
+  function draw(list){
+    const cont = document.getElementById('h-list');
+  >Aucune vente sur cette période.</p>'; return; }
+    const totalPeriode = list.reduce((s,v)=>s+v.total,0);
+    cont.innerHTML = `<p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">${list.length} vente(s) · total ${fmt(totalPeriode)}</p>` +
+      list.map(v=>`
+        <div class="vente-card" data-id="${v.id}">
+          <div>
+            <div>${v.clientNom || 'Client comptant'}</div>
+            <div class="heure">${new Date(v.date).toLocaleString('fr-FR')} · ${v.items.length} article(s)</div>
+          </div>
+          <div class="total">${fmt(v.total)}</div>
+        </div>
+      `).join('');
+    cont.querySelectorAll('.vente-card').forEach(c=> c.addEventListener('click', ()=>{
+      const v = list.find(x=>x.id===Number(c.dataset.id));
+      openVenteDetail(v);
+    }));
+  }
+  draw(ventes.filter(v=> v.date.slice(0,10)===todayStr()));
+  document.getElementById('h-date').addEventListener('change', (e)=>{
+    draw(ventes.filter(v=> v.date.slice(0,10)===e.target.value));
+  });
+  document.getElementById('h-all').addEventListener('click', ()=> draw(ventes));
+
+  function openVenteDetail(v){
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML = `
+      <div class="modal">
+        <h2>Vente N° ${v.id}</h2>
+        <p style="font-size:12.5px;color:var(--text-dim);">${new Date(v.date).toLocaleString('fr-FR')} — ${v.clientNom||'Client comptant'}</p>
+        <table>
+          <thead><tr><th>Article</th><th>Qté</th><th>Total</th></tr></thead>
+          <tbody>
+            ${v.items.map(it=>`<tr><td>${it.nom}</td><td>${it.qte}</td><td>${fmt(it.sousTotal)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="tot-row" style="margin-top:8px;"><span>Remise</span><span>${fmt(v.remise)}</span></div>
+        <div class="tot-row grand"><span>Total</span><span>${fmt(v.total)}</span></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="m-close">Fermer</button>
+          <button class="btn" id="m-print">Imprimer le reçu</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(bg);
+    bg.addEventListener('click', (e)=>{ if(e.target===bg) bg.remove(); });
+    document.getElementById('m-close').addEventListener('click', ()=> bg.remove());
+    document.getElementById('m-print').addEventListener('click', ()=> imprimerRecu(v));
+  }
+}
+
+/* ==================================================================
+   VUE — PARAMETRES
+   ================================================================== */
+async function renderParametres(el){
+  const nom = (await Params.get('nomBoutique'))?.valeur || '';
+  const adresse = (await Params.get('adresse'))?.valeur || '';
+  const tel = (await Params.get('telephone'))?.valeur || '';
+  el.innerHTML = `
+    <div class="card" style="max-width:480px;">
+      <div class="field"><label>Nom de la boutique</label><input id="p-nom" value="${nom}"></div>
+      <div class="field"><label>Adresse</label><input id="p-adresse" value="${adresse}"></div>
+      <div class="field"><label>Téléphone</label><input id="p-tel" value="${tel}"></div>
+      <button class="btn" id="p-save">Enregistrer</button>
+    </div>
+    <div class="section-title">Données</div>
+    <div class="card" style="max-width:480px;display:flex;gap:10px;">
+      <button class="btn secondary" id="p-export">Exporter (sauvegarde)</button>
+      <button class="btn danger" id="p-reset">Réinitialiser tout</button>
+    </div>
+  `;
+  document.getElementById('p-save').addEventListener('click', async ()=>{
+    await Params.set('nomBoutique', document.getElementById('p-nom').value.trim());
+    await Params.set('adresse', document.getElementById('p-adresse').value.trim());
+    await Params.set('telephone', document.getElementById('p-tel').value.trim());
+    toast('Paramètres enregistrés');
+  });
+  document.getElementById('p-export').addEventListener('click', async ()=>{
+    const data = { articles: await Articles.all(), ventes: await Ventes.all() };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sauvegarde_quincaillerie_'+todayStr()+'.json';
+    a.click();
+  });
+  document.getElementById('p-reset').addEventListener('click', ()=>{
+    if(confirm('Cette action supprime TOUTES les données (stock, ventes). Continuer ?')){
+      indexedDB.del
+  // Article de démons
 
   #main{
     flex:1;
@@ -192,15 +514,7 @@
   }
   .art-tile:active{ border-color:var(--gold); }
   .art-tile .nom{font-size:12.5px;font-weight:600;line-height:1.25;}
-  .art-tile .ref{font-size:10px;color:var(--text-dim);}
-  .art-tile .prix{font-size:13.5px;color:var(--gold);font-weight:700;margin-top:2px;}
-  .art-tile .stockbar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:4px;}
-  .art-tile .stockbar > div{height:100%;background:var(--green);}
-  .art-tile.rupture{opacity:.45;}
-
-  #panier-list{flex:1;overflow-y:auto;margin-bottom:10px;}
-  .panier-item{
-    display:flex;align-items:center;gap:8px;
+  .art-tiitems:center;gap:8px;
     padding:8px 0;border-bottom:1px solid var(--line);
     font-size:13px;
   }
@@ -526,343 +840,4 @@ async function renderStock(el){
         <div class="field"><label>Nom de l'article</label><input id="f-nom" value="${existing?.nom||''}"></div>
         <div class="field-row">
           <div class="field"><label>Prix d'achat</label><input id="f-achat" type="number" inputmode="numeric" value="${existing?.prixAchat??''}"></div>
-          <div class="field"><label>Prix de vente</label><input id="f-vente" type="number" inputmode="numeric" value="${existing?.prixVente??''}"></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Quantité en stock</label><input id="f-qte" type="number" inputmode="numeric" value="${existing?.quantite??''}"></div>
-          <div class="field"><label>Seuil d'alerte</label><input id="f-seuil" type="number" inputmode="numeric" value="${existing?.seuilAlerte??5}"></div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn secondary" id="m-cancel">Annuler</button>
-          <button class="btn" id="m-save">Enregistrer</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(bg);
-    bg.addEventListener('click', (e)=>{ if(e.target===bg) bg.remove(); });
-    document.getElementById('m-cancel').addEventListener('click', ()=> bg.remove());
-    document.getElementById('m-save').addEventListener('click', async ()=>{
-      const ref = document.getElementById('f-ref').value.trim();
-      const nom = document.getElementById('f-nom').value.trim();
-      if(!ref || !nom){ toast('Référence et nom obligatoires', true); return; }
-      const obj = {
-        reference: ref,
-        nom,
-        categorie: document.getElementById('f-cat').value.trim(),
-        prixAchat: Number(document.getElementById('f-achat').value)||0,
-        prixVente: Number(document.getElementById('f-vente').value)||0,
-        quantite: Number(document.getElementById('f-qte').value)||0,
-        seuilAlerte: Number(document.getElementById('f-seuil').value)||0,
-      };
-      try{
-        if(existing){ obj.id = existing.id; await Articles.update(obj); toast('Article mis à jour'); }
-        else{ await Articles.add(obj); toast('Article ajouté'); }
-        bg.remove();
-        articles = await Articles.all();
-        draw(articles);
-      }catch(err){
-        toast('Erreur : référence déjà utilisée ?', true);
-      }
-    });
-  }
-}
-
-/* ==================================================================
-   VUE — POINT DE VENTE
-   ================================================================== */
-let panier = []; // {articleId, reference, nom, prixVente, qte, stockDispo}
-
-async function renderVente(el){
-  panier = [];
-  const articles = await Articles.all();
-  const clients = await Params.get('nomBoutique');
-
-  el.innerHTML = `
-    <div id="pos">
-      <div id="pos-left">
-        <div id="scan-box">
-          <input id="scan-input" placeholder="Scanner un code-barres ou taper une référence puis Entrée…" autofocus>
-          <button class="btn secondary" id="btn-clear-scan">Effacer</button>
-        </div>
-        <div id="catalog"></div>
-      </div>
-      <div id="pos-right">
-        <div class="field"><label>Client (optionnel)</label><input id="v-client" placeholder="Nom du client"></div>
-        <div id="panier-list"><div id="panier-empty">Le panier est vide.<br>Scannez ou touchez un article.</div></div>
-        <div id="totaux">
-          <div class="tot-row"><span>Sous-total</span><span id="tot-sous">0 F</span></div>
-          <div class="tot-row">
-            <span>Remise</span>
-            <span><input id="remise-input" type="number" inputmode="numeric" value="0"> F</span>
-          </div>
-          <div class="tot-row grand"><span>Total</span><span id="tot-total">0 F</span></div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:12px;">
-          <button class="btn secondary" id="btn-vider" style="flex:1;">Vider</button>
-          <button class="btn" id="btn-valider" style="flex:2;">Valider la vente</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  function drawCatalog(list){
-    const cat = document.getElementById('catalog');
-    cat.innerHTML = list.map(a=>{
-      const ratio = a.seuilAlerte>0 ? Math.min(100, (a.quantite/(a.seuilAlerte*3))*100) : 100;
-      return `
-      <div class="art-tile ${a.quantite<=0?'rupture':''}" data-id="${a.id}">
-        <div class="nom">${a.nom}</div>
-        <div class="ref">${a.reference} · stock ${a.quantite}</div>
-        <div class="prix">${fmt(a.prixVente)}</div>
-        <div class="stockbar"><div style="width:${ratio}%;background:${a.quantite<=a.seuilAlerte?'var(--orange)':'var(--green)'}"></div></div>
-      </div>`;
-    }).join('') || '<p style="color:var(--text-dim);">Aucun article. Ajoutez du stock d\\'abord.</p>';
-    cat.querySelectorAll('.art-tile').forEach(t=> t.addEventListener('click', ()=> addToCartById(Number(t.dataset.id))));
-  }
-  drawCatalog(articles);
-
-  const scanInput = document.getElementById('scan-input');
-  scanInput.addEventListener('keydown', async (e)=>{
-    if(e.key==='Enter'){
-      const val = scanInput.value.trim();
-      scanInput.value='';
-      if(!val) return;
-      const found = await Articles.byReference(val) || articles.find(a=>a.nom.toLowerCase()===val.toLowerCase());
-      if(found) addToCartById(found.id);
-      else toast('Article introuvable : '+val, true);
-    }
-  });
-  document.getElementById('btn-clear-scan').addEventListener('click', ()=>{ scanInput.value=''; scanInput.focus(); });
-
-  function addToCartById(id){
-    const art = articles.find(a=>a.id===id);
-    if(!art) return;
-    if(art.quantite<=0){ toast('Rupture de stock : '+art.nom, true); return; }
-    const line = panier.find(l=>l.articleId===id);
-    if(line){
-      if(line.qte+1 > art.quantite){ toast('Stock insuffisant', true); return; }
-      line.qte += 1;
-    } else {
-      panier.push({articleId:id, reference:art.reference, nom:art.nom, prixVente:art.prixVente, qte:1, stockDispo:art.quantite});
-    }
-    drawPanier();
-  }
-
-  function drawPanier(){
-    const list = document.getElementById('panier-list');
-    if(panier.length===0){
-      list.innerHTML = '<div id="panier-empty">Le panier est vide.<br>Scannez ou touchez un article.</div>';
-    } else {
-      list.innerHTML = panier.map((l,i)=>`
-        <div class="panier-item">
-          <div class="nom">${l.nom}<div class="sub">${fmt(l.prixVente)} / unité</div></div>
-          <div class="qte-ctrl">
-            <button data-dec="${i}">−</button>
-            <span>${l.qte}</span>
-            <button data-inc="${i}">+</button>
-          </div>
-          <div class="sous-total">${fmt(l.prixVente*l.qte)}</div>
-          <button class="rm" data-rm="${i}">✕</button>
-        </div>
-      `).join('');
-      list.querySelectorAll('[data-inc]').forEach(b=> b.addEventListener('click', ()=>{
-        const i = Number(b.dataset.inc); const l = panier[i];
-        if(l.qte+1 > l.stockDispo){ toast('Stock insuffisant', true); return; }
-        l.qte++; drawPanier();
-      }));
-      list.querySelectorAll('[data-dec]').forEach(b=> b.addEventListener('click', ()=>{
-        const i = Number(b.dataset.dec); panier[i].qte--;
-        if(panier[i].qte<=0) panier.splice(i,1);
-        drawPanier();
-      }));
-      list.querySelectorAll('[data-rm]').forEach(b=> b.addEventListener('click', ()=>{
-        panier.splice(Number(b.dataset.rm),1); drawPanier();
-      }));
-    }
-    updateTotals();
-  }
-
-  function updateTotals(){
-    const sousTotal = panier.reduce((s,l)=> s + l.prixVente*l.qte, 0);
-    const remise = Number(document.getElementById('remise-input').value)||0;
-    const total = Math.max(0, sousTotal - remise);
-    document.getElementById('tot-sous').textContent = fmt(sousTotal);
-    document.getElementById('tot-total').textContent = fmt(total);
-  }
-  document.getElementById('remise-input').addEventListener('input', updateTotals);
-
-  document.getElementById('btn-vider').addEventListener('click', ()=>{ panier=[]; drawPanier(); });
-
-  document.getElementById('btn-valider').addEventListener('click', async ()=>{
-    if(panier.length===0){ toast('Le panier est vide', true); return; }
-    const sousTotal = panier.reduce((s,l)=> s + l.prixVente*l.qte, 0);
-    const remise = Number(document.getElementById('remise-input').value)||0;
-    const total = Math.max(0, sousTotal - remise);
-    const clientNom = document.getElementById('v-client').value.trim();
-
-    // Décrémenter le stock
-    for(const l of panier){
-      const art = await Articles.get(l.articleId);
-      art.quantite -= l.qte;
-      await Articles.update(art);
-    }
-    const vente = {
-      date: new Date().toISOString(),
-      items: panier.map(l=>({reference:l.reference, nom:l.nom, prixVente:l.prixVente, qte:l.qte, sousTotal:l.prixVente*l.qte})),
-      remise, total, clientNom
-    };
-    const id = await Ventes.add(vente);
-    vente.id = id;
-    toast('Vente validée : '+fmt(total));
-    imprimerRecu(vente);
-    panier=[];
-    document.getElementById('v-client').value='';
-    document.getElementById('remise-input').value=0;
-    const refreshed = await Articles.all();
-    drawCatalog(refreshed);
-    drawPanier();
-  });
-
-  scanInput.focus();
-}
-
-/* ==================================================================
-   REÇU IMPRIMABLE
-   ================================================================== */
-async function imprimerRecu(vente){
-  const nomBoutique = (await Params.get('nomBoutique'))?.valeur || 'Quincaillerie';
-  const adresse = (await Params.get('adresse'))?.valeur || '';
-  const tel = (await Params.get('telephone'))?.valeur || '';
-  const d = new Date(vente.date);
-  const recu = document.getElementById('recu');
-  recu.innerHTML = `
-    <h3>${nomBoutique}</h3>
-    <div style="text-align:center;font-size:11px;">${adresse}${tel? ' · '+tel : ''}</div>
-    <div class="line"></div>
-    <div style="font-size:11px;">
-      Date : ${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>
-      Client : ${vente.clientNom || 'Comptant'}<br>
-      Reçu N° : ${vente.id}
-    </div>
-    <div class="line"></div>
-    <table>
-      ${vente.items.map(it=>`
-        <tr><td colspan="2">${it.nom} (${it.reference})</td></tr>
-        <tr><td>${it.qte} x ${fmt(it.prixVente)}</td><td style="text-align:right;">${fmt(it.sousTotal)}</td></tr>
-      `).join('')}
-    </table>
-    <div class="line"></div>
-    <table>
-      <tr><td>Sous-total</td><td style="text-align:right;">${fmt(vente.items.reduce((s,i)=>s+i.sousTotal,0))}</td></tr>
-      <tr><td>Remise</td><td style="text-align:right;">${fmt(vente.remise)}</td></tr>
-      <tr><td><b>TOTAL</b></td><td style="text-align:right;"><b>${fmt(vente.total)}</b></td></tr>
-    </table>
-    <div class="line"></div>
-    <div style="text-align:center;font-size:11px;">Merci de votre confiance !</div>
-  `;
-  setTimeout(()=> window.print(), 200);
-}
-
-/* ==================================================================
-   VUE — HISTORIQUE
-   ================================================================== */
-async function renderHistorique(el){
-  const ventes = (await Ventes.all()).sort((a,b)=> new Date(b.date)-new Date(a.date));
-  el.innerHTML = `
-    <div class="toolbar">
-      <input type="date" id="h-date" value="${todayStr()}">
-      <button class="btn secondary" id="h-all">Tout afficher</button>
-    </div>
-    <div id="h-list"></div>
-  `;
-  function draw(list){
-    const cont = document.getElementById('h-list');
-    if(list.length===0){ cont.innerHTML = '<p style="color:var(--text-dim);">Aucune vente sur cette période.</p>'; return; }
-    const totalPeriode = list.reduce((s,v)=>s+v.total,0);
-    cont.innerHTML = `<p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">${list.length} vente(s) · total ${fmt(totalPeriode)}</p>` +
-      list.map(v=>`
-        <div class="vente-card" data-id="${v.id}">
-          <div>
-            <div>${v.clientNom || 'Client comptant'}</div>
-            <div class="heure">${new Date(v.date).toLocaleString('fr-FR')} · ${v.items.length} article(s)</div>
-          </div>
-          <div class="total">${fmt(v.total)}</div>
-        </div>
-      `).join('');
-    cont.querySelectorAll('.vente-card').forEach(c=> c.addEventListener('click', ()=>{
-      const v = list.find(x=>x.id===Number(c.dataset.id));
-      openVenteDetail(v);
-    }));
-  }
-  draw(ventes.filter(v=> v.date.slice(0,10)===todayStr()));
-  document.getElementById('h-date').addEventListener('change', (e)=>{
-    draw(ventes.filter(v=> v.date.slice(0,10)===e.target.value));
-  });
-  document.getElementById('h-all').addEventListener('click', ()=> draw(ventes));
-
-  function openVenteDetail(v){
-    const bg = document.createElement('div');
-    bg.className = 'modal-bg';
-    bg.innerHTML = `
-      <div class="modal">
-        <h2>Vente N° ${v.id}</h2>
-        <p style="font-size:12.5px;color:var(--text-dim);">${new Date(v.date).toLocaleString('fr-FR')} — ${v.clientNom||'Client comptant'}</p>
-        <table>
-          <thead><tr><th>Article</th><th>Qté</th><th>Total</th></tr></thead>
-          <tbody>
-            ${v.items.map(it=>`<tr><td>${it.nom}</td><td>${it.qte}</td><td>${fmt(it.sousTotal)}</td></tr>`).join('')}
-          </tbody>
-        </table>
-        <div class="tot-row" style="margin-top:8px;"><span>Remise</span><span>${fmt(v.remise)}</span></div>
-        <div class="tot-row grand"><span>Total</span><span>${fmt(v.total)}</span></div>
-        <div class="modal-actions">
-          <button class="btn secondary" id="m-close">Fermer</button>
-          <button class="btn" id="m-print">Imprimer le reçu</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(bg);
-    bg.addEventListener('click', (e)=>{ if(e.target===bg) bg.remove(); });
-    document.getElementById('m-close').addEventListener('click', ()=> bg.remove());
-    document.getElementById('m-print').addEventListener('click', ()=> imprimerRecu(v));
-  }
-}
-
-/* ==================================================================
-   VUE — PARAMETRES
-   ================================================================== */
-async function renderParametres(el){
-  const nom = (await Params.get('nomBoutique'))?.valeur || '';
-  const adresse = (await Params.get('adresse'))?.valeur || '';
-  const tel = (await Params.get('telephone'))?.valeur || '';
-  el.innerHTML = `
-    <div class="card" style="max-width:480px;">
-      <div class="field"><label>Nom de la boutique</label><input id="p-nom" value="${nom}"></div>
-      <div class="field"><label>Adresse</label><input id="p-adresse" value="${adresse}"></div>
-      <div class="field"><label>Téléphone</label><input id="p-tel" value="${tel}"></div>
-      <button class="btn" id="p-save">Enregistrer</button>
-    </div>
-    <div class="section-title">Données</div>
-    <div class="card" style="max-width:480px;display:flex;gap:10px;">
-      <button class="btn secondary" id="p-export">Exporter (sauvegarde)</button>
-      <button class="btn danger" id="p-reset">Réinitialiser tout</button>
-    </div>
-  `;
-  document.getElementById('p-save').addEventListener('click', async ()=>{
-    await Params.set('nomBoutique', document.getElementById('p-nom').value.trim());
-    await Params.set('adresse', document.getElementById('p-adresse').value.trim());
-    await Params.set('telephone', document.getElementById('p-tel').value.trim());
-    toast('Paramètres enregistrés');
-  });
-  document.getElementById('p-export').addEventListener('click', async ()=>{
-    const data = { articles: await Articles.all(), ventes: await Ventes.all() };
-    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'sauvegarde_quincaillerie_'+todayStr()+'.json';
-    a.click();
-  });
-  document.getElementById('p-reset').addEventListener('click', ()=>{
-    if(confirm('Cette action supprime TOUTES les données (stock, ventes). Continuer ?')){
-      indexedDB.del
-  // Article de démons
+          <div class=
